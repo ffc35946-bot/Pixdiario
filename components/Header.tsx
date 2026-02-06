@@ -13,7 +13,7 @@ const Header: React.FC = () => {
   const handleLogout = () => {
     if (window.confirm('Deseja realmente sair da sua conta?')) {
       logout();
-      navigate('/login');
+      navigate('/login', { replace: true });
     }
   };
 

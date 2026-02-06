@@ -104,7 +104,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (name: string, email: string, phone: string, pass: string): Promise<User> => {
-    // Check global banned list
     if (bannedData.emails.includes(email.toLowerCase()) || bannedData.phones.includes(phone)) {
       throw new Error('Estes dados estão bloqueados para novos cadastros.');
     }
@@ -124,9 +123,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newUser;
   };
   
-  const logout = () => {
+  const logout = useCallback(() => {
     setCurrentUserId(null);
-  };
+    window.localStorage.removeItem('currentUserId');
+  }, []);
 
   const updateUserProfile = async (userId: string, data: Partial<User>): Promise<User> => {
     let updated: User | null = null;
@@ -141,7 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     throw new Error('Usuário não encontrado');
   };
 
-  const addUserPix = async (userId: string, pixKeyType: PixKeyType, pixKey: string, cpf: string): Promise<User> => {
+  const addUserPix = async (userId: string, pixKeyType: PixKeyType, pixKey: string, cpf: string) => {
     const cleanCpf = cpf.replace(/\D/g, '');
     if (bannedData.cpfs.includes(cleanCpf)) {
       throw new Error('Este CPF está bloqueado no sistema.');
@@ -202,7 +202,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const confirmUserSendback = useCallback((requestId: string) => {
-    // Altera para 'paid' para sinalizar ao admin que o usuário enviou
     setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'paid' } : r));
   }, []);
 
@@ -217,21 +216,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const banUser = useCallback((userId: string) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
-    
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, isBanned: true } : u));
-    
     setBannedData(prev => {
       const emails = [...prev.emails];
       const phones = [...prev.phones];
       const cpfs = [...prev.cpfs];
-      
       if (user.email && !emails.includes(user.email.toLowerCase())) emails.push(user.email.toLowerCase());
       if (user.phone && !phones.includes(user.phone)) phones.push(user.phone);
       if (user.cpf) {
         const cleanCpf = user.cpf.replace(/\D/g, '');
         if (!cpfs.includes(cleanCpf)) cpfs.push(cleanCpf);
       }
-      
       return { emails, phones, cpfs };
     });
   }, [users]);
@@ -239,9 +234,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const unbanUser = useCallback((userId: string) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
-    
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, isBanned: false } : u));
-    
     setBannedData(prev => ({
       emails: prev.emails.filter(e => e !== user.email.toLowerCase()),
       phones: prev.phones.filter(p => p !== user.phone),

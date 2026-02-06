@@ -96,9 +96,9 @@ const SettingsPage: React.FC = () => {
   };
 
   const handleLogout = () => {
-    if (window.confirm('Deseja realmente sair da sua conta? Você precisará fazer login novamente para acessar seus dados.')) {
+    if (window.confirm('Deseja realmente sair da sua conta?')) {
       logout();
-      navigate('/login');
+      navigate('/login', { replace: true });
     }
   };
 
