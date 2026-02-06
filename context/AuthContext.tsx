@@ -35,7 +35,7 @@ const INITIAL_EVENTS: Event[] = [
     description: 'Ciclo rápido de entrada para novos usuários. Receba o valor total e participe da nossa rede diária.',
     imageUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?q=80&w=600&auto=format&fit=crop',
     value: '50.00',
-    createdAt: new Date().toISOString()
+    createdAt: new Date(Date.now() - 10000).toISOString()
   },
   {
     id: 'event_default_2',
@@ -43,7 +43,7 @@ const INITIAL_EVENTS: Event[] = [
     description: 'Aumente seus ganhos diários com este ciclo de confiança. Pagamento rápido via Pix.',
     imageUrl: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?q=80&w=600&auto=format&fit=crop',
     value: '100.00',
-    createdAt: new Date().toISOString()
+    createdAt: new Date(Date.now() - 5000).toISOString()
   },
   {
     id: 'event_default_3',
@@ -51,11 +51,10 @@ const INITIAL_EVENTS: Event[] = [
     description: 'O maior retorno da plataforma. Reservado para usuários que seguem corretamente os ciclos de 75%.',
     imageUrl: 'https://images.unsplash.com/photo-1554224155-672d804a05f1?q=80&w=600&auto=format&fit=crop',
     value: '200.00',
-    createdAt: new Date().toISOString()
+    createdAt: new Date(Date.now()).toISOString()
   }
 ];
 
-// --- Context Definition ---
 interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
@@ -84,7 +83,6 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
-// --- Provider Component ---
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(() => {
     const stored = getFromStorage<User[]>('users', []);
@@ -102,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       return [adminUser, ...stored];
     }
-    return stored.map(u => u.email === ADMIN_EMAIL ? { ...u, passwordHash: ADMIN_PASSWORD } : u);
+    return stored;
   });
 
   const [events, setEvents] = useState<Event[]>(() => {
@@ -114,6 +112,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => getFromStorage('currentUserId', null));
   const [bannedData, setBannedData] = useState<BannedData>(() => getFromStorage('bannedData', { emails: [], phones: [], cpfs: [] }));
   const [isMaintenanceMode, setIsMaintenanceMode] = useState<boolean>(() => getFromStorage('isMaintenanceMode', false));
+
+  // Sincronização em Tempo Real entre Abas
+  useEffect(() => {
+    const syncWithStorage = (e: StorageEvent) => {
+      if (e.key === 'events' && e.newValue) setEvents(JSON.parse(e.newValue));
+      if (e.key === 'requests' && e.newValue) setRequests(JSON.parse(e.newValue));
+      if (e.key === 'users' && e.newValue) setUsers(JSON.parse(e.newValue));
+      if (e.key === 'isMaintenanceMode' && e.newValue) setIsMaintenanceMode(JSON.parse(e.newValue));
+    };
+
+    window.addEventListener('storage', syncWithStorage);
+    return () => window.removeEventListener('storage', syncWithStorage);
+  }, []);
 
   const currentUser = users.find(u => u.id === currentUserId) || null;
   const isAuthenticated = !!currentUser;
@@ -129,9 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, pass: string): Promise<User> => {
     const user = users.find(u => u.email === email && u.passwordHash === pass);
     if (user) {
-      if (user.isBanned) {
-        throw new Error('Sua conta foi banida por violação de termos.');
-      }
+      if (user.isBanned) throw new Error('Sua conta foi banida por violação de termos.');
       setCurrentUserId(user.id);
       return user;
     }
@@ -140,32 +149,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (name: string, email: string, phone: string, pass: string): Promise<User> => {
     if (bannedData.emails.includes(email.toLowerCase()) || bannedData.phones.includes(phone)) {
-      throw new Error('Estes dados estão bloqueados para novos cadastros.');
+      throw new Error('Dados bloqueados no sistema.');
     }
-
-    if (users.some(u => u.email === email)) {
-      throw new Error('O e-mail já está em uso.');
-    }
-    const newUser: User = {
-      id: `user_${Date.now()}`,
-      name,
-      email,
-      phone,
-      passwordHash: pass,
-    };
+    if (users.some(u => u.email === email)) throw new Error('E-mail em uso.');
+    
+    const newUser: User = { id: `user_${Date.now()}`, name, email, phone, passwordHash: pass };
     setUsers(prev => [...prev, newUser]);
     setCurrentUserId(newUser.id);
     return newUser;
   };
   
-  const logout = useCallback(() => {
-    setCurrentUserId(null);
-    window.localStorage.removeItem('currentUserId');
-  }, []);
+  const logout = useCallback(() => setCurrentUserId(null), []);
 
-  const toggleMaintenanceMode = useCallback(() => {
-    setIsMaintenanceMode(prev => !prev);
-  }, []);
+  const toggleMaintenanceMode = useCallback(() => setIsMaintenanceMode(prev => !prev), []);
 
   const updateUserProfile = async (userId: string, data: Partial<User>): Promise<User> => {
     let updated: User | null = null;
@@ -182,9 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addUserPix = async (userId: string, pixKeyType: PixKeyType, pixKey: string, cpf: string) => {
     const cleanCpf = cpf.replace(/\D/g, '');
-    if (bannedData.cpfs.includes(cleanCpf)) {
-      throw new Error('Este CPF está bloqueado no sistema.');
-    }
+    if (bannedData.cpfs.includes(cleanCpf)) throw new Error('CPF bloqueado.');
     return updateUserProfile(userId, { pixKeyType, pixKey, cpf });
   };
   
@@ -208,15 +202,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const createRequest = async (userId: string, eventId: string) => {
      const user = users.find(u => u.id === userId);
      const event = events.find(e => e.id === eventId);
-     if (!user || !user.pixKey || !user.cpf) {
-         throw new Error("Complete seu cadastro PIX para participar.");
-     }
+     if (!user || !user.pixKey || !user.cpf) throw new Error("Complete seu cadastro PIX.");
      if (user.isBanned) throw new Error("Usuário banido.");
      if (!event) throw new Error("Evento não encontrado.");
 
      if (requests.some(r => r.userId === userId && r.eventId === eventId && r.status !== 'completed')) {
-        throw new Error("Você já tem uma participação ativa para este evento.");
+        throw new Error("Você já tem uma participação ativa neste evento.");
      }
+     
      const newRequest: ParticipationRequest = {
          id: `req_${Date.now()}`,
          userId,
@@ -281,34 +274,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
   }, [users]);
 
-  const contextValue = {
-    currentUser,
-    isAuthenticated,
-    isAdmin,
-    users,
-    events,
-    requests,
-    bannedData,
-    isMaintenanceMode,
-    toggleMaintenanceMode,
-    login,
-    register,
-    logout,
-    updateUserProfile,
-    addUserPix,
-    addOrUpdateEvent,
-    deleteEvent,
-    createRequest,
-    notifyUser,
-    confirmUserSendback,
-    confirmAdminReceipt,
-    clearUserNotification,
-    banUser,
-    unbanUser
-  };
-
   return (
-    <AuthContext.Provider value={contextValue}>
+    <AuthContext.Provider value={{
+      currentUser, isAuthenticated, isAdmin, users, events, requests, bannedData, isMaintenanceMode,
+      toggleMaintenanceMode, login, register, logout, updateUserProfile, addUserPix, addOrUpdateEvent,
+      deleteEvent, createRequest, notifyUser, confirmUserSendback, confirmAdminReceipt, clearUserNotification, banUser, unbanUser
+    }}>
       {children}
     </AuthContext.Provider>
   );
