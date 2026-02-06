@@ -104,8 +104,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [events, setEvents] = useState<Event[]>(() => {
-    const stored = getFromStorage<Event[]>('events', []);
-    return stored.length > 0 ? stored : INITIAL_EVENTS;
+    // Check for the raw item in localStorage.
+    const storedItem = window.localStorage.getItem('events');
+    
+    // If the key doesn't exist at all, it's the very first run, so we seed it.
+    if (storedItem === null) {
+        return INITIAL_EVENTS;
+    }
+    
+    // Otherwise, if the key exists (even if it's an empty array "[]"), we parse and use its value.
+    try {
+        return JSON.parse(storedItem);
+    } catch (e) {
+        console.error("Failed to parse events from localStorage", e);
+        return []; // Return an empty array on parsing error to avoid crashing.
+    }
   });
   
   const [requests, setRequests] = useState<ParticipationRequest[]>(() => getFromStorage('requests', []));
