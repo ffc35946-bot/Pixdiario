@@ -27,7 +27,6 @@ const AdminPage: React.FC = () => {
   const [userSearch, setUserSearch] = useState('');
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   
-  // Toast State
   const [toast, setToast] = useState<{message: string, type: ToastType, isVisible: boolean}>({
     message: '',
     type: 'success',
@@ -95,12 +94,16 @@ const AdminPage: React.FC = () => {
                      .sort((a, b) => {
                        if (a.status === 'paid' && b.status !== 'paid') return -1;
                        if (a.status !== 'paid' && b.status === 'paid') return 1;
-                       return b.createdAt.localeCompare(a.createdAt);
+                       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                      });
     }
     return requests.filter(r => r.status === requestFilter)
-                   .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+                   .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [requests, requestFilter]);
+
+  const sortedEvents = useMemo(() => {
+    return [...events].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [events]);
 
   const stats = useMemo(() => ({
     pending: requests.filter(r => r.status === 'pending').length,
@@ -287,20 +290,26 @@ const AdminPage: React.FC = () => {
       {activeTab === 'events' && (
         <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
           <div className="p-6 sm:p-8 border-b border-slate-100 dark:border-slate-800">
-            <h2 className="text-xl font-black tracking-tight uppercase">Gerenciar Eventos</h2>
+            <h2 className="text-xl font-black tracking-tight uppercase">Gerenciar Eventos ({sortedEvents.length})</h2>
           </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {events.map(event => (
-              <div key={event.id} className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border-2 border-transparent hover:border-emerald-500 transition-all">
-                <div className="flex justify-between items-start mb-3">
-                  <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">R$ {event.value}</span>
-                  <button onClick={() => handleEditEvent(event)} className="text-slate-400 hover:text-emerald-600 font-black text-[9px] uppercase tracking-wider">Editar</button>
+          {sortedEvents.length > 0 ? (
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {sortedEvents.map(event => (
+                <div key={event.id} className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border-2 border-transparent hover:border-emerald-500 transition-all">
+                  <div className="flex justify-between items-start mb-3">
+                    <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">R$ {event.value}</span>
+                    <button onClick={() => handleEditEvent(event)} className="text-slate-400 hover:text-emerald-600 font-black text-[9px] uppercase tracking-wider">Editar</button>
+                  </div>
+                  <h4 className="font-extrabold text-base mb-1 truncate">{event.title}</h4>
+                  <p className="text-slate-500 text-[11px] line-clamp-2 font-bold leading-relaxed">{event.description}</p>
                 </div>
-                <h4 className="font-extrabold text-base mb-1 truncate">{event.title}</h4>
-                <p className="text-slate-500 text-[11px] line-clamp-2 font-bold leading-relaxed">{event.description}</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+             <div className="px-8 py-20 text-center text-slate-300 text-[10px] font-black uppercase tracking-widest">
+                Nenhum evento criado. Clique em "Novo Evento" para começar.
+            </div>
+          )}
         </div>
       )}
 
