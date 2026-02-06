@@ -1,0 +1,5 @@
+{
+  "name": "Pix Diário",
+  "description": "An application for managing daily Pix events and requests, featuring separate user and admin roles for event participation and payout management.",
+  "requestFramePermissions": []
+}
