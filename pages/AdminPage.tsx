@@ -8,7 +8,18 @@ import { ADMIN_PIX_KEY } from '../constants';
 import Toast, { ToastType } from '../components/Toast';
 
 const AdminPage: React.FC = () => {
-  const { events, requests, notifyUser, confirmAdminReceipt, users, banUser, unbanUser } = useAuth();
+  const { 
+    events, 
+    requests, 
+    notifyUser, 
+    confirmAdminReceipt, 
+    users, 
+    banUser, 
+    unbanUser, 
+    isMaintenanceMode, 
+    toggleMaintenanceMode 
+  } = useAuth();
+  
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'events' | 'requests' | 'banned'>('requests');
@@ -44,12 +55,17 @@ const AdminPage: React.FC = () => {
     setEditingEvent(null);
   }, []);
   
+  const handleToggleMaintenance = () => {
+    const status = !isMaintenanceMode ? "ativado" : "desativado";
+    toggleMaintenanceMode();
+    showToast(`Modo Manutenção ${status}!`, !isMaintenanceMode ? 'info' : 'success');
+  };
+
   const handleApproveRegistration = async (req: ParticipationRequest) => {
     if(window.confirm(`Aprovar entrada de ${req.userName}?`)) {
         setIsProcessing(req.id);
         try {
           const msg = `Sua entrada no evento "${req.eventTitle}" foi APROVADA! O Pix de R$ ${req.eventValue} será enviado. Após receber, envie os 75% para continuar lucrando.`;
-          // Altera para 'waiting_receipt' (Aguardando envio de 75%)
           await notifyUser(req.userId, req.id, msg, 'waiting_receipt');
           showToast('Inscrição aprovada com sucesso!');
         } catch (error) {
@@ -74,7 +90,6 @@ const AdminPage: React.FC = () => {
   };
 
   const filteredRequests = useMemo(() => {
-    // Na aba AP75%, mostramos tanto quem o admin aprovou quanto quem já confirmou o envio
     if (requestFilter === 'waiting_receipt') {
       return requests.filter(r => r.status === 'waiting_receipt' || r.status === 'paid')
                      .sort((a, b) => {
@@ -128,10 +143,24 @@ const AdminPage: React.FC = () => {
           </div>
           <p className="text-slate-500 font-semibold text-xs sm:text-sm ml-11 sm:ml-14">Central de operações Pix Diário.</p>
         </div>
-        <button onClick={handleAddNewEvent} className="w-full md:w-auto bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black hover:bg-emerald-700 shadow-xl transition-all flex items-center justify-center gap-2">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
-          Novo Evento
-        </button>
+        
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleToggleMaintenance}
+            className={`flex-1 md:flex-none px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg active:scale-95 ${
+              isMaintenanceMode 
+                ? 'bg-red-100 text-red-600 border-2 border-red-200' 
+                : 'bg-slate-100 text-slate-600 border-2 border-slate-200'
+            }`}
+          >
+            {isMaintenanceMode ? '🔓 Abrir Sistema' : '🔒 Travar Sistema'}
+          </button>
+          
+          <button onClick={handleAddNewEvent} className="flex-1 md:flex-none bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black hover:bg-emerald-700 shadow-xl transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
+            Novo Evento
+          </button>
+        </div>
       </div>
 
       <div className="flex bg-slate-100 dark:bg-slate-800/50 p-1.5 rounded-2xl w-full gap-1 overflow-x-auto no-scrollbar">
@@ -255,7 +284,6 @@ const AdminPage: React.FC = () => {
         </div>
       )}
 
-      {/* Restante do componente permanece o mesmo para as outras abas */}
       {activeTab === 'events' && (
         <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
           <div className="p-6 sm:p-8 border-b border-slate-100 dark:border-slate-800">

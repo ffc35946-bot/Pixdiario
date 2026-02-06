@@ -37,6 +37,8 @@ interface AuthContextType {
   events: Event[];
   requests: ParticipationRequest[];
   bannedData: BannedData;
+  isMaintenanceMode: boolean;
+  toggleMaintenanceMode: () => void;
   login: (email: string, pass: string) => Promise<User>;
   register: (name: string, email: string, phone: string, pass: string) => Promise<User>;
   logout: () => void;
@@ -80,6 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [requests, setRequests] = useState<ParticipationRequest[]>(() => getFromStorage('requests', []));
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => getFromStorage('currentUserId', null));
   const [bannedData, setBannedData] = useState<BannedData>(() => getFromStorage('bannedData', { emails: [], phones: [], cpfs: [] }));
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState<boolean>(() => getFromStorage('isMaintenanceMode', false));
 
   const currentUser = users.find(u => u.id === currentUserId) || null;
   const isAuthenticated = !!currentUser;
@@ -90,6 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => setToStorage('requests', requests), [requests]);
   useEffect(() => setToStorage('currentUserId', currentUserId), [currentUserId]);
   useEffect(() => setToStorage('bannedData', bannedData), [bannedData]);
+  useEffect(() => setToStorage('isMaintenanceMode', isMaintenanceMode), [isMaintenanceMode]);
 
   const login = async (email: string, pass: string): Promise<User> => {
     const user = users.find(u => u.email === email && u.passwordHash === pass);
@@ -126,6 +130,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = useCallback(() => {
     setCurrentUserId(null);
     window.localStorage.removeItem('currentUserId');
+  }, []);
+
+  const toggleMaintenanceMode = useCallback(() => {
+    setIsMaintenanceMode(prev => !prev);
   }, []);
 
   const updateUserProfile = async (userId: string, data: Partial<User>): Promise<User> => {
@@ -250,6 +258,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     events,
     requests,
     bannedData,
+    isMaintenanceMode,
+    toggleMaintenanceMode,
     login,
     register,
     logout,

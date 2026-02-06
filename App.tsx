@@ -8,11 +8,20 @@ import HomePage from './pages/HomePage';
 import AdminPage from './pages/AdminPage';
 import SettingsPage from './pages/SettingsPage';
 import UserRequestsPage from './pages/UserRequestsPage';
+import MaintenancePage from './pages/MaintenancePage';
 import Header from './components/Header';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
+import { useAuth } from './hooks/useAuth';
 
 const App: React.FC = () => {
+  const { isMaintenanceMode, isAdmin } = useAuth();
+
+  // Se estiver em manutenção e NÃO for admin, mostra apenas a tela de manutenção
+  if (isMaintenanceMode && !isAdmin) {
+    return <MaintenancePage />;
+  }
+
   return (
     <HashRouter>
       <div className="min-h-screen flex flex-col text-slate-800 dark:text-slate-200">
