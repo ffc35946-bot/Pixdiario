@@ -28,6 +28,33 @@ interface BannedData {
   cpfs: string[];
 }
 
+const INITIAL_EVENTS: Event[] = [
+  {
+    id: 'event_default_1',
+    title: 'Oportunidade Iniciante',
+    description: 'Ciclo rápido de entrada para novos usuários. Receba o valor total e participe da nossa rede diária.',
+    imageUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?q=80&w=600&auto=format&fit=crop',
+    value: '50.00',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'event_default_2',
+    title: 'Ciclo Intermediário',
+    description: 'Aumente seus ganhos diários com este ciclo de confiança. Pagamento rápido via Pix.',
+    imageUrl: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?q=80&w=600&auto=format&fit=crop',
+    value: '100.00',
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'event_default_3',
+    title: 'Master Diário',
+    description: 'O maior retorno da plataforma. Reservado para usuários que seguem corretamente os ciclos de 75%.',
+    imageUrl: 'https://images.unsplash.com/photo-1554224155-672d804a05f1?q=80&w=600&auto=format&fit=crop',
+    value: '200.00',
+    createdAt: new Date().toISOString()
+  }
+];
+
 // --- Context Definition ---
 interface AuthContextType {
   currentUser: User | null;
@@ -78,7 +105,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return stored.map(u => u.email === ADMIN_EMAIL ? { ...u, passwordHash: ADMIN_PASSWORD } : u);
   });
 
-  const [events, setEvents] = useState<Event[]>(() => getFromStorage('events', []));
+  const [events, setEvents] = useState<Event[]>(() => {
+    const stored = getFromStorage<Event[]>('events', []);
+    return stored.length > 0 ? stored : INITIAL_EVENTS;
+  });
+  
   const [requests, setRequests] = useState<ParticipationRequest[]>(() => getFromStorage('requests', []));
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => getFromStorage('currentUserId', null));
   const [bannedData, setBannedData] = useState<BannedData>(() => getFromStorage('bannedData', { emails: [], phones: [], cpfs: [] }));
