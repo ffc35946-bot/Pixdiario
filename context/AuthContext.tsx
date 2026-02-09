@@ -58,6 +58,7 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Inicialização de Estados do Storage
   const [users, setUsers] = useState<User[]>(() => {
     const stored = getFromStorage<User[]>('users', []);
     const adminExists = stored.some(u => u.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
@@ -83,46 +84,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [bannedData, setBannedData] = useState<BannedData>(() => getFromStorage('bannedData', { emails: [], phones: [], cpfs: [] }));
   const [isMaintenanceMode, setIsMaintenanceMode] = useState<boolean>(() => getFromStorage('isMaintenanceMode', false));
 
-  // Sincronização em tempo real entre abas/janelas
+  // Sincronização em tempo real entre Abas (Vital para teste Admin/User simultâneo)
   useEffect(() => {
     const syncWithStorage = (e: StorageEvent) => {
-      if (e.key === 'events') setEvents(e.newValue ? JSON.parse(e.newValue) : []);
-      if (e.key === 'requests') setRequests(e.newValue ? JSON.parse(e.newValue) : []);
-      if (e.key === 'isMaintenanceMode') setIsMaintenanceMode(e.newValue ? JSON.parse(e.newValue) : false);
-      if (e.key === 'users') setUsers(e.newValue ? JSON.parse(e.newValue) : []);
+      if (!e.newValue) return;
+      const data = JSON.parse(e.newValue);
+      switch (e.key) {
+        case 'events': setEvents(data); break;
+        case 'requests': setRequests(data); break;
+        case 'isMaintenanceMode': setIsMaintenanceMode(data); break;
+        case 'users': setUsers(data); break;
+        case 'currentUserId': setCurrentUserId(data); break;
+      }
     };
     window.addEventListener('storage', syncWithStorage);
     return () => window.removeEventListener('storage', syncWithStorage);
   }, []);
 
+  // Persistência Centralizada (Garante que localStorage esteja SEMPRE atualizado)
+  useEffect(() => setToStorage('users', users), [users]);
+  useEffect(() => setToStorage('events', events), [events]);
+  useEffect(() => setToStorage('requests', requests), [requests]);
+  useEffect(() => setToStorage('currentUserId', currentUserId), [currentUserId]);
+  useEffect(() => setToStorage('bannedData', bannedData), [bannedData]);
+  useEffect(() => setToStorage('isMaintenanceMode', isMaintenanceMode), [isMaintenanceMode]);
+
   const currentUser = useMemo(() => users.find(u => u.id === currentUserId) || null, [users, currentUserId]);
   const isAuthenticated = !!currentUser;
   const isAdmin = useMemo(() => currentUser?.email.toLowerCase() === ADMIN_EMAIL.toLowerCase(), [currentUser]);
 
-  // Persistência Atômica: Salva sempre que houver mudança
-  const persistEvents = (newEvents: Event[]) => {
-    setEvents(newEvents);
-    setToStorage('events', newEvents);
-  };
-
-  const persistMaintenance = (value: boolean) => {
-    setIsMaintenanceMode(value);
-    setToStorage('isMaintenanceMode', value);
-  };
-
-  const persistUsers = (newUsers: User[]) => {
-    setUsers(newUsers);
-    setToStorage('users', newUsers);
-  };
-
-  useEffect(() => setToStorage('requests', requests), [requests]);
-  useEffect(() => setToStorage('currentUserId', currentUserId), [currentUserId]);
-  useEffect(() => setToStorage('bannedData', bannedData), [bannedData]);
-
   const login = async (email: string, pass: string): Promise<User> => {
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.passwordHash === pass);
     if (user) {
-      if (user.isBanned) throw new Error('Acesso negado.');
+      if (user.isBanned) throw new Error('Sua conta está suspensa.');
       setCurrentUserId(user.id);
       return user;
     }
@@ -131,32 +125,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (name: string, email: string, phone: string, pass: string): Promise<User> => {
     const lowerEmail = email.toLowerCase();
-    if (bannedData.emails.includes(lowerEmail)) throw new Error('Dados bloqueados.');
+    if (bannedData.emails.includes(lowerEmail)) throw new Error('E-mail bloqueado no sistema.');
     if (users.some(u => u.email.toLowerCase() === lowerEmail)) throw new Error('E-mail já cadastrado.');
     
     const newUser: User = { id: `user_${Date.now()}`, name, email: lowerEmail, phone, passwordHash: pass };
-    persistUsers([...users, newUser]);
+    setUsers(prev => [...prev, newUser]);
     setCurrentUserId(newUser.id);
     return newUser;
   };
   
-  const logout = useCallback(() => {
-    setCurrentUserId(null);
-    setToStorage('currentUserId', null);
-  }, []);
+  const logout = useCallback(() => setCurrentUserId(null), []);
 
-  const toggleMaintenanceMode = useCallback(() => {
-    setIsMaintenanceMode(prev => {
-      const newVal = !prev;
-      setToStorage('isMaintenanceMode', newVal);
-      return newVal;
-    });
-  }, []);
+  const toggleMaintenanceMode = useCallback(() => setIsMaintenanceMode(prev => !prev), []);
 
   const updateUserProfile = async (userId: string, data: Partial<User>): Promise<User> => {
-    const newUsers = users.map(u => u.id === userId ? { ...u, ...data } : u);
-    persistUsers(newUsers);
-    return newUsers.find(u => u.id === userId)!;
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...data } : u));
+    return users.find(u => u.id === userId)!;
   };
 
   const addUserPix = async (userId: string, pixKeyType: PixKeyType, pixKey: string, cpf: string) => {
@@ -165,35 +149,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const addOrUpdateEvent = useCallback((eventData: Omit<Event, 'id' | 'createdAt'> & { id?: string }) => {
     setEvents(prev => {
-      let updated;
       if (eventData.id) {
-        updated = prev.map(e => e.id === eventData.id ? { ...e, ...eventData } as Event : e);
-      } else {
-        const newEvent: Event = {
-          ...eventData,
-          id: `event_${Date.now()}`,
-          createdAt: new Date().toISOString(),
-        };
-        updated = [newEvent, ...prev];
+        return prev.map(e => e.id === eventData.id ? { ...e, ...eventData } as Event : e);
       }
-      setToStorage('events', updated);
-      return updated;
+      const newEvent: Event = {
+        title: eventData.title,
+        description: eventData.description,
+        imageUrl: eventData.imageUrl,
+        value: eventData.value,
+        id: `ev_${Date.now()}`,
+        createdAt: new Date().toISOString(),
+      };
+      return [newEvent, ...prev];
     });
   }, []);
 
   const deleteEvent = useCallback((eventId: string) => {
-    setEvents(prev => {
-      const filtered = prev.filter(e => e.id !== eventId);
-      setToStorage('events', filtered);
-      return filtered;
-    });
+    setEvents(prev => prev.filter(e => e.id !== eventId));
   }, []);
 
   const createRequest = async (userId: string, eventId: string) => {
      const user = users.find(u => u.id === userId);
      const event = events.find(e => e.id === eventId);
-     if (!user?.pixKey) throw new Error("Complete seu perfil financeiro.");
-     if (!event) throw new Error("Evento inválido.");
+     if (!user?.pixKey) throw new Error("Configure seu PIX primeiro.");
+     if (!event) throw new Error("Evento não encontrado.");
 
      const newRequest: ParticipationRequest = {
          id: `req_${Date.now()}`,
@@ -208,80 +187,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
          status: 'pending',
          createdAt: new Date().toISOString()
      };
-     setRequests(prev => {
-       const updated = [newRequest, ...prev];
-       setToStorage('requests', updated);
-       return updated;
-     });
+     setRequests(prev => [newRequest, ...prev]);
   };
   
   const notifyUser = useCallback((userId: string, requestId: string, message: string, nextStatus?: RequestStatus) => {
-    setUsers(prev => {
-      const updated = prev.map(u => u.id === userId ? { ...u, notification: message } : u);
-      setToStorage('users', updated);
-      return updated;
-    });
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, notification: message } : u));
     if (nextStatus) {
-      setRequests(prev => {
-        const updated = prev.map(r => r.id === requestId ? { ...r, status: nextStatus } : r);
-        setToStorage('requests', updated);
-        return updated;
-      });
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: nextStatus } : r));
     }
   }, []);
 
   const confirmUserSendback = useCallback((requestId: string) => {
-    setRequests(prev => {
-      const updated = prev.map(r => r.id === requestId ? { ...r, status: 'paid' } : r);
-      setToStorage('requests', updated);
-      return updated;
-    });
+    setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'paid' } : r));
   }, []);
 
   const confirmAdminReceipt = useCallback((requestId: string) => {
-    setRequests(prev => {
-      const updated = prev.map(r => r.id === requestId ? { ...r, status: 'completed' } : r);
-      setToStorage('requests', updated);
-      return updated;
-    });
+    setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'completed' } : r));
   }, []);
   
   const clearUserNotification = useCallback((userId: string) => {
-     setUsers(prev => {
-       const updated = prev.map(u => u.id === userId ? { ...u, notification: undefined } : u);
-       setToStorage('users', updated);
-       return updated;
-     });
+     setUsers(prev => prev.map(u => u.id === userId ? { ...u, notification: undefined } : u));
   }, []);
 
   const banUser = useCallback((userId: string) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
-    setUsers(prev => {
-      const updated = prev.map(u => u.id === userId ? { ...u, isBanned: true } : u);
-      setToStorage('users', updated);
-      return updated;
-    });
-    setBannedData(prev => {
-      const newData = { ...prev, emails: [...prev.emails, user.email.toLowerCase()] };
-      setToStorage('bannedData', newData);
-      return newData;
-    });
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, isBanned: true } : u));
+    setBannedData(prev => ({ ...prev, emails: [...prev.emails, user.email.toLowerCase()] }));
   }, [users]);
 
   const unbanUser = useCallback((userId: string) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
-    setUsers(prev => {
-      const updated = prev.map(u => u.id === userId ? { ...u, isBanned: false } : u);
-      setToStorage('users', updated);
-      return updated;
-    });
-    setBannedData(prev => {
-      const newData = { ...prev, emails: prev.emails.filter(e => e !== user.email.toLowerCase()) };
-      setToStorage('bannedData', newData);
-      return newData;
-    });
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, isBanned: false } : u));
+    setBannedData(prev => ({ ...prev, emails: prev.emails.filter(e => e !== user.email.toLowerCase()) }));
   }, [users]);
 
   return (

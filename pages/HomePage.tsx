@@ -20,8 +20,10 @@ const HomePage: React.FC = () => {
   }, [events]);
 
   useEffect(() => {
-    // Reduzimos o delay de skeleton para ser quase imperceptível se já houver dados
-    const timer = setTimeout(() => setIsLoading(false), events.length > 0 ? 100 : 600);
+    // Se temos eventos, para de carregar rápido. Se não, espera um pouco para garantir a sincronização.
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 500);
     
     const tutorialSeen = localStorage.getItem(`tutorial_seen_${currentUser?.id}`);
     if (!tutorialSeen && currentUser) setIsFirstVisit(true);
@@ -88,7 +90,7 @@ const HomePage: React.FC = () => {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-        {isLoading && sortedEvents.length === 0 ? (
+        {isLoading ? (
           Array.from({ length: 3 }).map((_, idx) => <EventSkeleton key={idx} />)
         ) : sortedEvents.length > 0 ? (
           <motion.div className="col-span-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8" variants={containerVariants} initial="hidden" animate="visible">
@@ -99,8 +101,10 @@ const HomePage: React.FC = () => {
             ))}
           </motion.div>
         ) : (
-          <div className="col-span-full text-center py-20 bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800">
-            <p className="text-slate-400 font-black uppercase tracking-widest text-sm">Aguardando novos eventos...</p>
+          <div className="col-span-full text-center py-20 bg-white dark:bg-slate-900 rounded-[2rem] border-2 border-dashed border-slate-100 dark:border-slate-800">
+            <div className="text-4xl mb-4">📢</div>
+            <p className="text-slate-400 font-black uppercase tracking-widest text-sm">Nenhum evento ativo no momento</p>
+            <p className="text-slate-400 text-[10px] font-bold mt-1">O administrador publicará novos em breve!</p>
           </div>
         )}
       </div>

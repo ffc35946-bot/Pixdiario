@@ -18,10 +18,12 @@ const MaintenanceWrapper: React.FC<{ children: React.ReactNode }> = ({ children 
   const { isMaintenanceMode, isAdmin } = useAuth();
   const location = useLocation();
 
-  // Rotas essenciais para o Admin conseguir desativar a manutenção
+  // Rotas de Auth para o Admin desativar se necessário
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
 
-  // BLOQUEIO TOTAL: Se estiver em manutenção e não for o Admin autenticado
+  // Se estiver em manutenção:
+  // 1. Bloqueia se NÃO for Admin
+  // 2. Permite apenas se for Admin OU for página de login/registro (para o admin entrar)
   if (isMaintenanceMode && !isAdmin && !isAuthPage) {
     return <MaintenancePage />;
   }
