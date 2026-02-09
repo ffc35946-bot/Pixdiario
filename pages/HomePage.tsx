@@ -14,17 +14,20 @@ const HomePage: React.FC = () => {
   const [isFirstVisit, setIsFirstVisit] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Ordena eventos do mais recente para o mais antigo
+  // Re-calcula eventos sempre que a lista de eventos no contexto mudar
   const sortedEvents = useMemo(() => {
     return [...events].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [events]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 800);
+    // Reduzimos o delay de skeleton para ser quase imperceptível se já houver dados
+    const timer = setTimeout(() => setIsLoading(false), events.length > 0 ? 100 : 600);
+    
     const tutorialSeen = localStorage.getItem(`tutorial_seen_${currentUser?.id}`);
     if (!tutorialSeen && currentUser) setIsFirstVisit(true);
+    
     return () => clearTimeout(timer);
-  }, [currentUser]);
+  }, [currentUser, events]);
 
   const handleCloseTutorial = () => {
     setIsFirstVisit(false);
@@ -85,7 +88,7 @@ const HomePage: React.FC = () => {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-        {isLoading ? (
+        {isLoading && sortedEvents.length === 0 ? (
           Array.from({ length: 3 }).map((_, idx) => <EventSkeleton key={idx} />)
         ) : sortedEvents.length > 0 ? (
           <motion.div className="col-span-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8" variants={containerVariants} initial="hidden" animate="visible">
