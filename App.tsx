@@ -14,16 +14,14 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import { useAuth } from './hooks/useAuth';
 
-// Wrapper para gerenciar a exibição da tela de manutenção de forma inteligente
 const MaintenanceWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isMaintenanceMode, isAdmin } = useAuth();
   const location = useLocation();
 
-  // Permite acesso às telas de autenticação mesmo em manutenção para evitar que o Admin fique trancado fora do sistema
+  // Rotas que o admin precisa acessar para "destravar" o sistema
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
 
-  // Se o modo manutenção estiver ativo e o usuário NÃO for administrador, 
-  // bloqueamos todas as páginas exceto a de Login (para permitir login do admin)
+  // Se estiver em manutenção e NÃO for admin, bloqueia tudo exceto login/cadastro
   if (isMaintenanceMode && !isAdmin && !isAuthPage) {
     return <MaintenancePage />;
   }
@@ -81,7 +79,6 @@ const App: React.FC = () => {
                   </ProtectedRoute>
                 } 
               />
-              {/* Redireciona qualquer rota inválida para a Home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>

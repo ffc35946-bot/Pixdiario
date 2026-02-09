@@ -1,5 +1,5 @@
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { User, Event, ParticipationRequest, PixKeyType, RequestStatus } from '../types';
 import { ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_PIX_KEY } from '../constants';
 
@@ -7,7 +7,8 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_PIX_KEY } from '../constants';
 const getFromStorage = <T,>(key: string, defaultValue: T): T => {
   try {
     const item = window.localStorage.getItem(key);
-    return item ? JSON.parse(item) : defaultValue;
+    if (!item) return defaultValue;
+    return JSON.parse(item);
   } catch (error) {
     console.error(`Error reading from localStorage key “${key}”:`, error);
     return defaultValue;
@@ -59,7 +60,7 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(() => {
     const stored = getFromStorage<User[]>('users', []);
-    const adminExists = stored.some(u => u.email === ADMIN_EMAIL);
+    const adminExists = stored.some(u => u.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
     if (!adminExists) {
       const adminUser: User = {
         id: 'admin_root',
@@ -76,10 +77,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return stored;
   });
 
-  // Inicializa eventos e limpa qualquer evento "default" antigo que possa estar no cache do navegador
+  // Lista de eventos começa estritamente do que está salvo (vazio por padrão)
   const [events, setEvents] = useState<Event[]>(() => {
     const stored = getFromStorage<Event[]>('events', []);
-    // Remove eventos que começam com 'event_default_' (legado das versões anteriores)
+    // Filtro de segurança para remover qualquer rastro de eventos automáticos de versões anteriores
     return stored.filter(e => !e.id.startsWith('event_default_'));
   });
   
@@ -88,26 +89,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [bannedData, setBannedData] = useState<BannedData>(() => getFromStorage('bannedData', { emails: [], phones: [], cpfs: [] }));
   const [isMaintenanceMode, setIsMaintenanceMode] = useState<boolean>(() => getFromStorage('isMaintenanceMode', false));
 
-  // Sincronização em Tempo Real entre Abas
+  // Escuta mudanças em outras abas para manter sincronizado
   useEffect(() => {
     const syncWithStorage = (e: StorageEvent) => {
-      if (e.key === 'events') {
-        const newEvents = e.newValue ? JSON.parse(e.newValue) : [];
-        setEvents(newEvents.filter((ev: any) => !ev.id.startsWith('event_default_')));
-      }
+      if (e.key === 'events') setEvents(e.newValue ? JSON.parse(e.newValue) : []);
       if (e.key === 'requests' && e.newValue) setRequests(JSON.parse(e.newValue));
       if (e.key === 'users' && e.newValue) setUsers(JSON.parse(e.newValue));
-      if (e.key === 'isMaintenanceMode' && e.newValue) setIsMaintenanceMode(JSON.parse(e.newValue));
+      if (e.key === 'isMaintenanceMode') setIsMaintenanceMode(e.newValue ? JSON.parse(e.newValue) : false);
     };
-
     window.addEventListener('storage', syncWithStorage);
     return () => window.removeEventListener('storage', syncWithStorage);
   }, []);
 
-  const currentUser = users.find(u => u.id === currentUserId) || null;
+  const currentUser = useMemo(() => users.find(u => u.id === currentUserId) || null, [users, currentUserId]);
   const isAuthenticated = !!currentUser;
-  const isAdmin = currentUser?.email === ADMIN_EMAIL;
+  const isAdmin = useMemo(() => currentUser?.email.toLowerCase() === ADMIN_EMAIL.toLowerCase(), [currentUser]);
 
+  // Persistência automática ao mudar qualquer estado
   useEffect(() => setToStorage('users', users), [users]);
   useEffect(() => setToStorage('events', events), [events]);
   useEffect(() => setToStorage('requests', requests), [requests]);
@@ -116,22 +114,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => setToStorage('isMaintenanceMode', isMaintenanceMode), [isMaintenanceMode]);
 
   const login = async (email: string, pass: string): Promise<User> => {
-    const user = users.find(u => u.email === email && u.passwordHash === pass);
+    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.passwordHash === pass);
     if (user) {
-      if (user.isBanned) throw new Error('Sua conta foi banida por violação de termos.');
+      if (user.isBanned) throw new Error('Sua conta foi suspensa.');
       setCurrentUserId(user.id);
       return user;
     }
-    throw new Error('Credenciais inválidas.');
+    throw new Error('E-mail ou senha incorretos.');
   };
 
   const register = async (name: string, email: string, phone: string, pass: string): Promise<User> => {
-    if (bannedData.emails.includes(email.toLowerCase()) || bannedData.phones.includes(phone)) {
-      throw new Error('Dados bloqueados no sistema.');
+    const lowerEmail = email.toLowerCase();
+    if (bannedData.emails.includes(lowerEmail) || bannedData.phones.includes(phone)) {
+      throw new Error('Estes dados estão bloqueados no sistema.');
     }
-    if (users.some(u => u.email === email)) throw new Error('E-mail em uso.');
+    if (users.some(u => u.email.toLowerCase() === lowerEmail)) throw new Error('Este e-mail já está cadastrado.');
     
-    const newUser: User = { id: `user_${Date.now()}`, name, email, phone, passwordHash: pass };
+    const newUser: User = { id: `user_${Date.now()}`, name, email: lowerEmail, phone, passwordHash: pass };
     setUsers(prev => [...prev, newUser]);
     setCurrentUserId(newUser.id);
     return newUser;
@@ -156,7 +155,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addUserPix = async (userId: string, pixKeyType: PixKeyType, pixKey: string, cpf: string) => {
     const cleanCpf = cpf.replace(/\D/g, '');
-    if (bannedData.cpfs.includes(cleanCpf)) throw new Error('CPF bloqueado.');
+    if (bannedData.cpfs.includes(cleanCpf)) throw new Error('Este CPF está bloqueado.');
     return updateUserProfile(userId, { pixKeyType, pixKey, cpf });
   };
   
@@ -183,12 +182,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const createRequest = async (userId: string, eventId: string) => {
      const user = users.find(u => u.id === userId);
      const event = events.find(e => e.id === eventId);
-     if (!user || !user.pixKey || !user.cpf) throw new Error("Complete seu cadastro PIX.");
-     if (user.isBanned) throw new Error("Usuário banido.");
-     if (!event) throw new Error("Evento não encontrado.");
+     if (!user || !user.pixKey || !user.cpf) throw new Error("Por favor, complete seu cadastro PIX antes.");
+     if (user.isBanned) throw new Error("Acesso negado.");
+     if (!event) throw new Error("Este evento não está mais disponível.");
 
      if (requests.some(r => r.userId === userId && r.eventId === eventId && r.status !== 'completed')) {
-        throw new Error("Você já tem uma participação ativa neste evento.");
+        throw new Error("Você já tem uma participação ativa neste ciclo.");
      }
      
      const newRequest: ParticipationRequest = {
