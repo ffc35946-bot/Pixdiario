@@ -76,8 +76,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return stored;
   });
 
-  // Começa com array vazio, lê apenas o que estiver no storage
-  const [events, setEvents] = useState<Event[]>(() => getFromStorage<Event[]>('events', []));
+  // Inicializa eventos e limpa qualquer evento "default" antigo que possa estar no cache do navegador
+  const [events, setEvents] = useState<Event[]>(() => {
+    const stored = getFromStorage<Event[]>('events', []);
+    // Remove eventos que começam com 'event_default_' (legado das versões anteriores)
+    return stored.filter(e => !e.id.startsWith('event_default_'));
+  });
   
   const [requests, setRequests] = useState<ParticipationRequest[]>(() => getFromStorage('requests', []));
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => getFromStorage('currentUserId', null));
@@ -88,7 +92,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const syncWithStorage = (e: StorageEvent) => {
       if (e.key === 'events') {
-        setEvents(e.newValue ? JSON.parse(e.newValue) : []);
+        const newEvents = e.newValue ? JSON.parse(e.newValue) : [];
+        setEvents(newEvents.filter((ev: any) => !ev.id.startsWith('event_default_')));
       }
       if (e.key === 'requests' && e.newValue) setRequests(JSON.parse(e.newValue));
       if (e.key === 'users' && e.newValue) setUsers(JSON.parse(e.newValue));
@@ -157,10 +162,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const addOrUpdateEvent = useCallback((eventData: Omit<Event, 'id' | 'createdAt'> & { id?: string }) => {
     if (eventData.id) {
-      setEvents(prev => prev.map(e => e.id === eventData.id ? { ...e, ...eventData } : e));
+      setEvents(prev => prev.map(e => e.id === eventData.id ? { ...e, ...eventData } as Event : e));
     } else {
       const newEvent: Event = {
-        ...eventData,
+        title: eventData.title,
+        description: eventData.description,
+        imageUrl: eventData.imageUrl,
+        value: eventData.value,
         id: `event_${Date.now()}`,
         createdAt: new Date().toISOString(),
       };
