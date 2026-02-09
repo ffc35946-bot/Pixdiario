@@ -28,33 +28,6 @@ interface BannedData {
   cpfs: string[];
 }
 
-const INITIAL_EVENTS: Event[] = [
-  {
-    id: 'event_default_1',
-    title: 'Oportunidade Iniciante',
-    description: 'Ciclo rápido de entrada para novos usuários. Receba o valor total e participe da nossa rede diária.',
-    imageUrl: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?q=80&w=600&auto=format&fit=crop',
-    value: '50.00',
-    createdAt: new Date(Date.now() - 10000).toISOString()
-  },
-  {
-    id: 'event_default_2',
-    title: 'Ciclo Intermediário',
-    description: 'Aumente seus ganhos diários com este ciclo de confiança. Pagamento rápido via Pix.',
-    imageUrl: 'https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?q=80&w=600&auto=format&fit=crop',
-    value: '100.00',
-    createdAt: new Date(Date.now() - 5000).toISOString()
-  },
-  {
-    id: 'event_default_3',
-    title: 'Master Diário',
-    description: 'O maior retorno da plataforma. Reservado para usuários que seguem corretamente os ciclos de 75%.',
-    imageUrl: 'https://images.unsplash.com/photo-1554224155-672d804a05f1?q=80&w=600&auto=format&fit=crop',
-    value: '200.00',
-    createdAt: new Date(Date.now()).toISOString()
-  }
-];
-
 interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
@@ -103,23 +76,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return stored;
   });
 
-  const [events, setEvents] = useState<Event[]>(() => {
-    // Check for the raw item in localStorage.
-    const storedItem = window.localStorage.getItem('events');
-    
-    // If the key doesn't exist at all, it's the very first run, so we seed it.
-    if (storedItem === null) {
-        return INITIAL_EVENTS;
-    }
-    
-    // Otherwise, if the key exists (even if it's an empty array "[]"), we parse and use its value.
-    try {
-        return JSON.parse(storedItem);
-    } catch (e) {
-        console.error("Failed to parse events from localStorage", e);
-        return []; // Return an empty array on parsing error to avoid crashing.
-    }
-  });
+  // Começa com array vazio, lê apenas o que estiver no storage
+  const [events, setEvents] = useState<Event[]>(() => getFromStorage<Event[]>('events', []));
   
   const [requests, setRequests] = useState<ParticipationRequest[]>(() => getFromStorage('requests', []));
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => getFromStorage('currentUserId', null));
@@ -129,7 +87,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sincronização em Tempo Real entre Abas
   useEffect(() => {
     const syncWithStorage = (e: StorageEvent) => {
-      if (e.key === 'events' && e.newValue) setEvents(JSON.parse(e.newValue));
+      if (e.key === 'events') {
+        setEvents(e.newValue ? JSON.parse(e.newValue) : []);
+      }
       if (e.key === 'requests' && e.newValue) setRequests(JSON.parse(e.newValue));
       if (e.key === 'users' && e.newValue) setUsers(JSON.parse(e.newValue));
       if (e.key === 'isMaintenanceMode' && e.newValue) setIsMaintenanceMode(JSON.parse(e.newValue));
